@@ -1,4 +1,4 @@
-use crate::block::BlockComplete;
+use crate::block::{BlockComplete, BlockCompletePoW};
 use crate::chain::ChainError::NotNextBlock;
 
 pub enum ChainError {

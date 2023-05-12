@@ -8,9 +8,21 @@ pub enum BlockError {
     InvalidBlock
 }
 
+pub enum BlockComplete {
+    POW(BlockCompletePoW),
+    POS(BlockCompletePoS)
+}
+
 #[derive(Serialize, Deserialize, Debug)]
-pub struct BlockComplete {
+pub struct BlockCompletePoW {
     hash: Vec<u8>,
+    block_inner: Block
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct BlockCompletePoS {
+    signature: Vec<u8>,
+    signing_id: Vec<u8>, // TODO: Change type to KadID
     block_inner: Block
 }
 
@@ -31,12 +43,12 @@ impl Block {
         }
     }
 
-    pub fn complete(mut self) -> BlockComplete {
+    pub fn complete_pow(mut self) -> BlockCompletePoW {
         loop {
             let bytes = bincode::serialize(&self).unwrap();
             let digest = sha1::Sha1::digest(&bytes);
             if verify_block_difficulty(&self, &digest[..]) {
-                return BlockComplete {
+                return BlockCompletePoW {
                     hash: digest.to_vec(),
                     block_inner: self
                 }
@@ -44,9 +56,13 @@ impl Block {
             self.nonce += 1
         }
     }
+
+    pub fn complete_pos(mut self) -> BlockCompletePoS {
+        todo!()
+    }
 }
 
-impl BlockComplete {
+impl BlockCompletePoW {
     pub fn as_block(&self) -> &Block {
         &self.block_inner
     }
@@ -64,13 +80,51 @@ impl BlockComplete {
         verify_block_difficulty(&self.block_inner, &self.hash[..])
     }
 
-    pub fn from_bytes(buffer: &[u8]) -> Result<BlockComplete, BlockError> {
-        let block: BlockComplete = serde_json::from_slice(buffer).map_err(|_| BlockError::DeserializeError)?;
+    pub fn from_bytes(buffer: &[u8]) -> Result<BlockCompletePoW, BlockError> {
+        let block: BlockCompletePoW = serde_json::from_slice(buffer).map_err(|_| BlockError::DeserializeError)?;
         if !block.validate() {
             Err(BlockError::InvalidBlock)
         } else {
             Ok(block)
         }
+    }
+}
+
+impl BlockComplete {
+    pub fn block_hash(&self) -> &[u8] {
+        match self {
+            BlockComplete::POW(block) => {
+                block.block_hash()
+            }
+            BlockComplete::POS(block) => {
+                block.block_hash()
+            }
+        }
+    }
+    pub fn as_block(&self) -> &Block {
+        match self {
+            BlockComplete::POW(block) => {
+                block.as_block()
+            }
+            BlockComplete::POS(block) => {
+                block.as_block()
+            }
+        }
+    }
+}
+
+impl BlockCompletePoS {
+
+    pub fn is_valid() -> bool {
+        todo!()
+    }
+
+    pub fn block_hash(&self) -> &[u8] {
+        todo!()
+    }
+
+    pub fn as_block(&self) -> &Block {
+        todo!()
     }
 }
 
