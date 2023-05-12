@@ -1,0 +1,7 @@
+[workspace]
+
+members = [
+	"auction-common",
+	"blockchain",
+	"kademlia"
+]
