@@ -19,7 +19,7 @@ struct TransactionSigning {
 type Signature = Vec<u8>;
 
 #[derive(Serialize, Deserialize)]
-struct Transaction {
+pub struct Transaction {
     body: TransactionSigning,
     signatures: [Signature; 8]
 }
