@@ -149,7 +149,7 @@ impl LocalNodeBuilder {
     pub fn start_empty(local_socket: UdpSocket) -> Self {
         let id = KadID::random();
         let mut b: Vec<_> = Default::default();
-        b.resize_with(160, Default::default);
+        b.resize_with(161, Default::default);
         let s = Default::default();
 
         LocalNodeBuilder {
