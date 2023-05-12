@@ -240,7 +240,11 @@ struct LocalNodeInner {
 impl LocalNodeInner {
     async fn message_handler(self: Arc<Self>, mut rx: Receiver<KadMessage>) {
         loop {
-            let message = rx.recv().await.unwrap();
+            let message = match rx.recv().await {
+                // if this closes, terminate
+                None => {break;}
+                Some(m) => m,
+            };
             match message.payload {
                 KadMessagePayload::Request(r) => {
                     self.clone().handle_request(r, message.sender).await;
@@ -278,7 +282,7 @@ impl LocalNodeInner {
             };
             let (tx, mut rx) = channel(10);
 
-            let _ = self.clone().do_rpc_request_impl(target_info, KadRequestFunction::Ping, tx).await;
+            self.clone().do_rpc_request_impl(target_info, KadRequestFunction::Ping, tx).await;
 
             match tokio::time::timeout(Duration::from_secs(REQUEST_TIMEOUT as u64), rx.recv()).await {
                 Ok(Some(_)) => {
@@ -317,7 +321,7 @@ impl LocalNodeInner {
         self: Arc<Self>,
         target: NodeInfo,
         payload: KadRequestFunction,
-        callback: Sender<(KadResponse, NodeInfo)>
+        callback: Sender<Option<(KadResponse, NodeInfo)>>
     ) {
         let (response_send, mut response_recv) = channel(1);
         let mut uid = KadID::random();
@@ -343,7 +347,7 @@ impl LocalNodeInner {
         let response_fut = response_recv.recv();
         match tokio::time::timeout(Duration::from_secs(REQUEST_TIMEOUT as u64), response_fut).await {
             Ok(Some(response)) => {
-                match callback.send(response).await {
+                match callback.send(Some(response)).await {
                     Ok(_) => {}
                     Err(_) => {
                         eprintln!("Callback not available, ignoring...")
@@ -355,6 +359,13 @@ impl LocalNodeInner {
             }
             Err(_) => {
                 eprintln!("A request timed out: {} did not respond", &target.socket_addr);
+                // TODO: Maybe Return a Result instead
+                match callback.send(None).await {
+                    Ok(_) => {}
+                    Err(_) => {
+                        eprintln!("Callback not available, ignoring...")
+                    }
+                }
                 {
                     let mut node_data = self.data.lock().unwrap();
                     node_data.delete_node(&target);
@@ -376,9 +387,14 @@ impl LocalNodeInner {
     ) -> LookupResult {
         // base step
         let start_list = self.data.lock().unwrap().get_closest_nodes(&key, ALPHA as usize);
-        let mut distance_cutoff = start_list.iter().map(|node| {
+        let mut distance_cutoff = match start_list.iter().map(|node| {
             &node.id ^ &key
-        }).min().unwrap();
+        }).min() {
+            None => {
+                todo!("Handle lookup when no nodes to start")
+            }
+            Some(m) => m,
+        };
         let (tx, mut rx) = channel((10 * ALPHA) as usize);
         let mut concurrency_count= 0;
 
@@ -424,38 +440,43 @@ impl LocalNodeInner {
             let response = rx.recv().await.unwrap();
             concurrency_count -= 1;
 
-            match response.0.function {
-                KadResponseFunction::Ping => {
-                    // wtf why
-                    eprintln!("Why did I get a ping??? 100% a bug");
-                    terminate = false;
-                }
-                KadResponseFunction::FindNode { nodes } => {
-                    Self::internal_onfindnode_stage1(
-                        &key,
-                        &mut distance_cutoff,
-                        &mut query_queue,
-                        &mut queried_nodes,
-                        &mut found_nodes,
-                        &mut terminate,
-                        response.1,
-                        nodes
-                    );
-                }
-                KadResponseFunction::FindValue(KadFindValueResponse::Next(nodes)) => {
-                    Self::internal_onfindnode_stage1(
-                        &key,
-                        &mut distance_cutoff,
-                        &mut query_queue,
-                        &mut queried_nodes,
-                        &mut found_nodes,
-                        &mut terminate,
-                        response.1,
-                        nodes
-                    );
-                }
-                KadResponseFunction::FindValue(KadFindValueResponse::Found(value)) => {
-                    return LookupResult::Value(value);
+            match response {
+                None => {/* TODO: Do something when no response, [TRUST]*/}
+                Some(response) => match response.0.function {
+                    KadResponseFunction::Ping => {
+                        // wtf why
+                        eprintln!("Why did I get a ping??? 100% a bug");
+                        terminate = false;
+                    }
+                    KadResponseFunction::FindNode { nodes } => {
+                        // TODO: [TRUST] Find Node returned
+                        Self::internal_onfindnode_stage1(
+                            &key,
+                            &mut distance_cutoff,
+                            &mut query_queue,
+                            &mut queried_nodes,
+                            &mut found_nodes,
+                            &mut terminate,
+                            response.1,
+                            nodes
+                        );
+                    }
+                    KadResponseFunction::FindValue(KadFindValueResponse::Next(nodes)) => {
+                        // TODO: [TRUST] Find Node Returned
+                        Self::internal_onfindnode_stage1(
+                            &key,
+                            &mut distance_cutoff,
+                            &mut query_queue,
+                            &mut queried_nodes,
+                            &mut found_nodes,
+                            &mut terminate,
+                            response.1,
+                            nodes
+                        );
+                    }
+                    KadResponseFunction::FindValue(KadFindValueResponse::Found(value)) => {
+                        return LookupResult::Value(value);
+                    }
                 }
             }
         }
@@ -480,20 +501,23 @@ impl LocalNodeInner {
             let response = rx.recv().await.unwrap();
             concurrency_count -= 1;
 
-            match response.0.function {
-                KadResponseFunction::Ping => {
-                    // wtf why
-                    eprintln!("Why did I get a ping??? 100% a bug");
-                    // however, do nothing if we do
-                }
-                KadResponseFunction::FindNode { nodes } => {
-                    Self::internal_onfindnode_stage2(&key, &mut query_queue, &mut queried_nodes, &mut found_nodes, response.1, nodes);
-                }
-                KadResponseFunction::FindValue(KadFindValueResponse::Next(nodes)) => {
-                    Self::internal_onfindnode_stage2(&key, &mut query_queue, &mut queried_nodes, &mut found_nodes, response.1, nodes);
-                }
-                KadResponseFunction::FindValue(KadFindValueResponse::Found(value)) => {
-                    return LookupResult::Value(value);
+            match response {
+                None => {/* TODO: Do something when no response, [TRUST] */}
+                Some(response) => match response.0.function {
+                    KadResponseFunction::Ping => {
+                        // wtf why
+                        eprintln!("Why did I get a ping??? 100% a bug");
+                        // however, do nothing if we do
+                    }
+                    KadResponseFunction::FindNode { nodes } => {
+                        Self::internal_onfindnode_stage2(&key, &mut query_queue, &mut queried_nodes, &mut found_nodes, response.1, nodes);
+                    }
+                    KadResponseFunction::FindValue(KadFindValueResponse::Next(nodes)) => {
+                        Self::internal_onfindnode_stage2(&key, &mut query_queue, &mut queried_nodes, &mut found_nodes, response.1, nodes);
+                    }
+                    KadResponseFunction::FindValue(KadFindValueResponse::Found(value)) => {
+                        return LookupResult::Value(value);
+                    }
                 }
             }
         }
@@ -542,7 +566,7 @@ impl LocalNodeInner {
         self: Arc<Self>,
         key: &KadID,
         get_value: bool,
-        tx: Sender<(KadResponse, NodeInfo)>,
+        tx: Sender<Option<(KadResponse, NodeInfo)>>,
         concurrency_count: &mut u8,
         query_queue: &mut BinaryHeap<LookupQElement>
     ) {
@@ -633,7 +657,10 @@ impl LocalNodeInner {
         let (tx, mut rx) = channel(1);
         // purposefully not calling tokio::spawn here, let the user of this call it themselves
         self.do_rpc_request_impl(dest, request, tx).await;
-        rx.recv().await
+        match rx.recv().await {
+            None => None,
+            Some(x) => x,
+        }
     }
 }
 

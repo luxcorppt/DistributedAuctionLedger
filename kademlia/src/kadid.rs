@@ -73,7 +73,7 @@ impl TryFrom<&str> for KadID {
 impl fmt::Display for KadID {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let s =  hex::encode_upper(self.0);
-        f.write_str(&*s)
+        f.write_str(&s)
     }
 }
 

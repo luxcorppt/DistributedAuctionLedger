@@ -200,11 +200,26 @@ async fn show_node_info_dispatch(args: ArgMatches, context: &mut ReplContext) ->
 }
 
 async fn node_get(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
-    todo!()
+    match &context.node {
+        None => Err(UseError::NotStarted)?,
+        Some(node) => {
+            let key: KadID = args.get_one::<String>("key").unwrap().as_str().try_into()?;
+            let value = node.get(key).await.map(|value| String::from_utf8_lossy(&value).into_owned());
+            Ok(value)
+        }
+    }
 }
 
 async fn node_insert(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
-    todo!()
+    match &context.node {
+        None => Err(UseError::NotStarted)?,
+        Some(node) => {
+            let key: KadID = args.get_one::<String>("key").unwrap().as_str().try_into()?;
+            let value: Vec<u8> =  args.get_one::<String>("value").unwrap().clone().into_bytes();
+            node.store(key, value).await;
+            Ok(None)
+        }
+    }
 }
 
 #[tokio::main(flavor = "current_thread")]
