@@ -16,6 +16,7 @@ anyhow = "1.0.69"
 time = { version = "0.3.20", features = ["serde-human-readable"] }
 itertools = "0.10.5"
 hex = "0.4.3"
+log = "0.4.17"
 
 [dependencies.tokio]
 version = "1.26.0"
@@ -24,7 +25,8 @@ features = ["macros","net","sync","time"]
 [dev-dependencies]
 clap = { version = "4.1.14", features = ["derive"] }
 reedline-repl-rs = { version = "1.0.6", features = ["async"] }
+simple_logger = "4.1.0"
 
 [dev-dependencies.tokio]
 version = "1.26.0"
-features = ["rt"]
+features = ["rt", "rt-multi-thread"]

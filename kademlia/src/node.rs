@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use itertools::{EitherOrBoth, Itertools};
+use log::{debug, info, warn};
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::sync::mpsc::Receiver;
@@ -239,10 +240,14 @@ struct LocalNodeInner {
 
 impl LocalNodeInner {
     async fn message_handler(self: Arc<Self>, mut rx: Receiver<KadMessage>) {
+        info!("Start message handler");
         loop {
             let message = match rx.recv().await {
                 // if this closes, terminate
-                None => {break;}
+                None => {
+                    info!("Channel closed. No more messages can be received.");
+                    break;
+                }
                 Some(m) => m,
             };
             match message.payload {
@@ -254,14 +259,18 @@ impl LocalNodeInner {
                 }
             }
         }
+        warn!("Message handler terminated.")
     }
 
     async fn bucket_refresher(self: Arc<Self>) {
+        info!("Start refresher loop");
         loop {
             tokio::time::sleep(Duration::from_secs(BUCKET_REFRESH_INTERVAL as u64)).await;
             let stale_indexes = {
                 self.data.lock().unwrap().get_stale_indexes()
             };
+
+            debug!("Refreshing buckets: {} stale", stale_indexes.len());
 
             for index in stale_indexes {
                 // TODO: maybe do something with this
@@ -275,6 +284,7 @@ impl LocalNodeInner {
     }
 
     async fn bootstrap_routing_table(self: Arc<Self>, bootstrap_addr: Option<SocketAddr>) {
+        info!("Start bootstrap procedure");
         if let Some(addr) = bootstrap_addr {
             let target_info = NodeInfo {
                 id: KadID::zeroes(),
@@ -286,13 +296,13 @@ impl LocalNodeInner {
 
             match tokio::time::timeout(Duration::from_secs(REQUEST_TIMEOUT as u64), rx.recv()).await {
                 Ok(Some(_)) => {
-                    // if we got here, then we succeeded to ping, nd have already updated our routing table
+                    // if we got here, then we succeeded to ping, and have already updated our routing table
                 }
                 Ok(None) => {
-                    eprintln!("Failed to bootstrap with {}. The channel closed.", addr);
+                    warn!("Failed to bootstrap with {}. The channel closed.", addr);
                 }
                 Err(_) => {
-                    eprintln!("Timed out when trying to bootstrap with {}. Continuing anyway.", addr);
+                    warn!("Timed out when trying to bootstrap with {}. Continuing anyway.", addr);
                 }
             }
         }
@@ -315,6 +325,7 @@ impl LocalNodeInner {
                 false
             ).await;
         }
+        info!("Bootstrap procedure complete");
     }
 
     async fn do_rpc_request_impl(
@@ -350,20 +361,20 @@ impl LocalNodeInner {
                 match callback.send(Some(response)).await {
                     Ok(_) => {}
                     Err(_) => {
-                        eprintln!("Callback not available, ignoring...")
+                        warn!("Callback not available, ignoring...")
                     }
                 }
             }
             Ok(None) => {
-                panic!("Unexpected channel close.")
+                warn!("Unexpected channel close.")
             }
             Err(_) => {
-                eprintln!("A request timed out: {} did not respond", &target.socket_addr);
+                warn!("A request timed out: {} did not respond", &target.socket_addr);
                 // TODO: Maybe Return a Result instead
                 match callback.send(None).await {
                     Ok(_) => {}
                     Err(_) => {
-                        eprintln!("Callback not available, ignoring...")
+                        warn!("Callback not available, ignoring...")
                     }
                 }
                 {
@@ -385,6 +396,7 @@ impl LocalNodeInner {
         key: KadID,
         get_value: bool
     ) -> LookupResult {
+        debug!("Starting node lookup for {}, get_value {}", key, get_value);
         // base step
         let start_list = self.data.lock().unwrap().get_closest_nodes(&key, ALPHA as usize);
         let mut distance_cutoff = match start_list.iter().map(|node| {
@@ -413,6 +425,10 @@ impl LocalNodeInner {
 
         // explicit iteration =  guarantees concurrency
         for _ in 0..ALPHA {
+            if query_queue.is_empty() {
+                debug!("Cannot reach ALPHA = {}, not enough nodes.", ALPHA);
+                break;
+            }
             Self::internal_lookup_nodes_spawn_rpc(
                 self.clone(),
                 &key,
@@ -445,7 +461,7 @@ impl LocalNodeInner {
                 Some(response) => match response.0.function {
                     KadResponseFunction::Ping => {
                         // wtf why
-                        eprintln!("Why did I get a ping??? 100% a bug");
+                        warn!("Why did I get a ping??? 100% a bug");
                         terminate = false;
                     }
                     KadResponseFunction::FindNode { nodes } => {
@@ -481,6 +497,8 @@ impl LocalNodeInner {
             }
         }
 
+        debug!("Lookup for {} reached stage 2: {} items in queue", key, query_queue.len());
+
         // At this point, we can't really go lower with the distance, so we resort to exausting our search space
         // We need at least K nodes to fulfill our request, or as many as we can get
         while queried_nodes.len() < K as usize {
@@ -506,7 +524,7 @@ impl LocalNodeInner {
                 Some(response) => match response.0.function {
                     KadResponseFunction::Ping => {
                         // wtf why
-                        eprintln!("Why did I get a ping??? 100% a bug");
+                        warn!("Why did I get a ping??? 100% a bug");
                         // however, do nothing if we do
                     }
                     KadResponseFunction::FindNode { nodes } => {
@@ -574,7 +592,7 @@ impl LocalNodeInner {
             if get_value { KadRequestFunction::FindValue { key: key.clone() } } else { KadRequestFunction::FindNode { id: key.clone() } };
 
         let info = query_queue.pop().unwrap();
-
+        debug!("Requesting find from {} for {}", info.node.id, key);
         // TODO: maybe do something with this handle eventually?
         let _ = tokio::spawn(self.do_rpc_request_impl(
             info.node,
@@ -642,9 +660,11 @@ impl LocalNodeInner {
         if let Some(sender) = sender {
             sender.send((response,origin)).await.unwrap();
         }
+        warn!("Got a response for a UID we don't have record of. The operation must have completed already.")
     }
 
     fn update_routing_table(self: Arc<Self>, node_data: NodeInfo) {
+        debug!("Routing table update: {:?}", node_data);
         // let data = Arc::clone(&self.data);
         self.data.lock().unwrap().update_node(node_data);
     }

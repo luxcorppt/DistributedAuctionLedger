@@ -222,8 +222,9 @@ async fn node_insert(args: ArgMatches, context: &mut ReplContext) -> Result<Opti
     }
 }
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main]
 async fn main() -> Result<()> {
+    simple_logger::init_with_env().unwrap();
     let mut repl = Repl::new(ReplContext::default())
         .with_command(
             Command::new("load")
