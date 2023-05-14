@@ -4,6 +4,7 @@ use crate::block::{Block, BlockComplete};
 mod block;
 mod chain;
 mod clients;
+mod merkle;
 
 fn main() {
     // let tm = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos();
