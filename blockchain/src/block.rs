@@ -1,7 +1,11 @@
+use std::cmp::Ordering;
 use std::fmt::{Debug};
 use serde::{Deserialize, Serialize};
 use sha1::Digest;
 use auction_common::Transaction;
+use crate::chain::{Chain};
+use compare::{Compare};
+use std::cmp::Ordering::{Less, Equal, Greater};
 
 pub enum BlockError {
     DeserializeError,
@@ -10,36 +14,32 @@ pub enum BlockError {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Block{
-    pub index: u32,
-    pub timestamp: u128,
-    pub prev_hash: Vec<u8>,
-    pub transactions: Vec<Transaction>,
-    pub difficulty: u64
+    index: u32,
+    timestamp: u128,
+    prev_hash: Vec<u8>,
+    nonce: u64,
+    transactions: Vec<Transaction>,
+    difficulty: u64
 }
 
 impl Block {
     pub fn new(index: u32, timestamp: u128, prev_hash: Vec<u8>, transactions: Vec<Transaction>, difficulty: u64) -> Self {
         Block {
-            index, timestamp, prev_hash, transactions, difficulty
+            index, timestamp, prev_hash, nonce: 0, transactions, difficulty
         }
     }
 
-    pub fn complete_pow(self) -> BlockCompletePoW {
-        let mut nonce: u64 = 0;
+    pub fn complete_pow(mut self) -> BlockCompletePoW {
         loop {
             let bytes_block = bincode::serialize(&self).unwrap();
-            // TODO: validate that we can use the nonce outside of the block struct
-            let bytes_nonce = bincode::serialize(&nonce).unwrap();
-            let bytes_all:Vec<u8> = [bytes_block, bytes_nonce].concat();
-            let digest = sha1::Sha1::digest(&bytes_all);
+            let digest = sha1::Sha1::digest(&bytes_block);
             if verify_block_difficulty(&self, &digest[..]) {
                 return BlockCompletePoW {
                     hash: digest.to_vec(),
-                    nonce,
                     block_inner: self
                 }
             }
-            nonce += 1
+            self.nonce += 1
         }
     }
 
@@ -60,7 +60,6 @@ pub enum BlockComplete {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BlockCompletePoW {
-    nonce: u64,
     hash: Vec<u8>,
     block_inner: Block
 }
@@ -83,16 +82,7 @@ impl BlockComplete {
             }
         }
     }
-    pub fn as_block(&self) -> &Block {
-        match self {
-            BlockComplete::POW(block) => {
-                block.as_block()
-            }
-            BlockComplete::POS(block) => {
-                block.as_block()
-            }
-        }
-    }
+
     pub fn is_valid(&self) -> bool {
         match self {
             BlockComplete::POW(block) => {
@@ -103,13 +93,42 @@ impl BlockComplete {
             }
         }
     }
+
+    pub fn get_prev_hash(&self) -> &Vec<u8>  {
+        match self {
+            BlockComplete::POW(block) => {
+                block.get_prev_hash()
+            }
+            BlockComplete::POS(block) => {
+                block.get_prev_hash()
+            }
+        }
+    }
+
+    pub fn get_index(&self) -> &u32  {
+        match self {
+            BlockComplete::POW(block) => {
+                block.get_index()
+            }
+            BlockComplete::POS(block) => {
+                block.get_index()
+            }
+        }
+    }
+
+    pub fn get_difficulty(&self) -> &u64  {
+        match self {
+            BlockComplete::POW(block) => {
+                block.get_difficulty()
+            }
+            BlockComplete::POS(block) => {
+                block.get_difficulty()
+            }
+        }
+    }
 }
 
 impl BlockCompletePoW {
-    pub fn as_block(&self) -> &Block {
-        &self.block_inner
-    }
-
     pub fn block_hash(&self) -> &[u8] {
         &self.hash[..]
     }
@@ -131,6 +150,18 @@ impl BlockCompletePoW {
             Ok(block)
         }
     }
+
+    pub fn get_prev_hash(&self) -> &Vec<u8> {
+        &self.block_inner.prev_hash
+    }
+
+    pub fn get_index(&self) -> &u32 {
+        &self.block_inner.index
+    }
+
+    pub fn get_difficulty(&self) -> &u64 {
+        &self.block_inner.difficulty
+    }
 }
 
 impl BlockCompletePoS {
@@ -143,16 +174,49 @@ impl BlockCompletePoS {
         &self.signature[..]
     }
 
-    pub fn as_block(&self) -> &Block {
-        &self.block_inner
+    pub fn get_prev_hash(&self) -> &Vec<u8> {
+        &self.block_inner.prev_hash
+    }
+
+    pub fn get_index(&self) -> &u32 {
+        &self.block_inner.index
+    }
+
+    pub fn get_difficulty(&self) -> &u64 {
+        &self.block_inner.difficulty
     }
 }
 
 
 fn verify_block_difficulty(block: &Block, hash: &[u8]) -> bool {
     let hex = hex::encode(hash).into_bytes();
-    hex[..block.difficulty as usize].into_iter().all(|&b| b == 0x00);
-    hash[0] % 13 == 0
+    let zeros = get_leading_zeros(&hex);
+    zeros as u64 >= block.difficulty
+}
+
+fn compare_blockchains(ch1: &Chain, ch2: &Chain) -> () {
+    let cmp = compare::natural();
+    match cmp.compare(&ch1.get_number_of_blocks(), &ch2.get_number_of_blocks()) {
+        Less | Greater => {
+            Equal;
+        }
+        Equal => {
+            Equal;
+        }
+    }
+    todo!()
+}
+
+fn get_leading_zeros(array: &Vec<u8>) -> u8 {
+    let mut result = 0u8;
+    for u in array {
+        if *u == 0 { result += 8; } else {
+            let temp: u8 = u.leading_zeros().try_into().expect("Called leading zeros on a u8, got a value above 255");
+            result += temp;
+            break;
+        }
+    }
+    result
 }
 
 #[cfg(test)]

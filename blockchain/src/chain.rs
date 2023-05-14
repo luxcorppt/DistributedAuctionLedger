@@ -25,7 +25,7 @@ impl Chain {
     pub fn add(&mut self, block: BlockComplete) -> Result<(), ChainError> {
         if let Some(prev) = self.chain.last() {
             let prev = prev.block_hash();
-            if block.as_block().prev_hash != prev {
+            if block.get_prev_hash() != prev {
                 return Err(NotNextBlock)
             }
         }
@@ -46,5 +46,9 @@ impl Chain {
             println!("Block {}: {:?}", n, block)
         }
         println!("\n\n");
+    }
+
+    pub fn get_number_of_blocks(&self) -> usize {
+        self.chain.len()
     }
 }
