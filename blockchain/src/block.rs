@@ -6,6 +6,7 @@ use auction_common::Transaction;
 use crate::chain::{Chain};
 use compare::{Compare};
 use std::cmp::Ordering::{Less, Equal, Greater};
+use crate::merkle::MerkleTree;
 
 pub enum BlockError {
     DeserializeError,
@@ -19,13 +20,16 @@ pub struct Block{
     prev_hash: Vec<u8>,
     nonce: u64,
     transactions: Vec<Transaction>,
+    merkle: MerkleTree,
     difficulty: u64
 }
 
 impl Block {
     pub fn new(index: u32, timestamp: u128, prev_hash: Vec<u8>, transactions: Vec<Transaction>, difficulty: u64) -> Self {
+        //let merkle = MerkleTree::from_transactions(transactions);
+        let merkle = MerkleTree::new();
         Block {
-            index, timestamp, prev_hash, nonce: 0, transactions, difficulty
+            index, timestamp, prev_hash, nonce: 0, transactions, merkle, difficulty
         }
     }
 

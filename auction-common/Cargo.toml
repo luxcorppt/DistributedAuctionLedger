@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 serde = "1.0.149"
 sha256 = "1.1.1"
+compare = "0.1.0"
 
 [dependencies.postcard]
 version = "1.0.2"

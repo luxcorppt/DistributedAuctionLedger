@@ -1,4 +1,6 @@
 use std::time::SystemTime;
+use rcgen::PKCS_ECDSA_P256_SHA256;
+use auction_common::Transaction;
 use crate::block::{Block, BlockComplete};
 
 mod block;
@@ -6,26 +8,50 @@ mod chain;
 mod clients;
 mod merkle;
 
-fn main() {
-    // let tm = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos();
-    // let block = Block::new(1, tm, vec![5; 8], vec![], 1);
-    //
-    //
-    // let keypair = rcgen::KeyPair::generate(&PKCS_ECDSA_P256_SHA256).unwrap();
-    // let pk = keypair.public_key_raw();
-    // let bytes = bincode::serialize(&block).unwrap();
-    //
-    // Sign
-    //
-    // let block = block.complete_pos(vec![], vec![]);
-    // println!("{:?}", block);
-    // let mut chain = chain::Chain::new();
-    // chain.add(BlockComplete::POS(block)).expect("Error Adding first block");
-    // println!("{:?}\n\n\n", chain);
-    // chain.debug();
-    //
-    // return;
+fn main(){
+    let transactions = Vec::from([
+        Transaction::new(0),
+        Transaction::new(1),
+        Transaction::new(2),
+        Transaction::new(3),
+        Transaction::new(4),
+        Transaction::new(5),
+        Transaction::new(6),
+        Transaction::new(7),
+        Transaction::new(8),
+        Transaction::new(9),
+        Transaction::new(10),
+        Transaction::new(11),
+        Transaction::new(12),
+        Transaction::new(13),
+        Transaction::new(14),
+        Transaction::new(15),
+        Transaction::new(16)
+    ]);
+    let tree = merkle::MerkleTree::from_transactions(transactions);
+    println!("{:?}", tree)
+}
 
+fn test_blockchain_pos() {
+    let tm = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos();
+    let block = Block::new(1, tm, vec![5; 8], vec![], 1);
+
+
+    let keypair = rcgen::KeyPair::generate(&PKCS_ECDSA_P256_SHA256).unwrap();
+    let pk = keypair.public_key_raw();
+    let bytes = bincode::serialize(&block).unwrap();
+
+    Sign
+
+    let block = block.complete_pos(vec![], vec![]);
+    println!("{:?}", block);
+    let mut chain = chain::Chain::new();
+    chain.add(BlockComplete::POS(block)).expect("Error Adding first block");
+    println!("{:?}\n\n\n", chain);
+    chain.debug();
+}
+
+fn test_blockchain_pow(){
     let tm = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos();
     let block = Block::new(1, tm, vec![5; 8], vec![], 1);
     let block = block.complete_pow();
@@ -43,6 +69,4 @@ fn main() {
     chain.add(BlockComplete::POW(new_block)).expect("Error Adding second block");
     // println!("{:?}\n\n\n", chain);
     chain.debug();
-
-
 }
