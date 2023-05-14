@@ -1,25 +1,32 @@
 use std::cmp::Ordering;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::{BinaryHeap, HashMap, HashSet};
-use std::mem;
+use std::hash::{Hash, Hasher};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use ed25519_dalek_fiat::{Keypair, PublicKey};
 use itertools::{EitherOrBoth, Itertools};
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
+use time::OffsetDateTime;
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::sync::mpsc::Receiver;
 use tokio::task::JoinHandle;
 use crate::{ALPHA, BUCKET_REFRESH_INTERVAL, K, KadError, MAX_MESSAGE_BUFFER, REQUEST_TIMEOUT, Result, rpc};
 use crate::buckets::KadBucket;
-use crate::kadid::{bucket, KadID};
-use crate::rpc::data::{KadFindValueResponse, KadMessage, KadMessagePayload, KadRequest, KadRequestFunction, KadResponse, KadResponseFunction};
+use crate::kadid::KadID;
+use crate::rpc::data::{KadFindValueResponse, KadMessage, KadMessagePayload, KadRequest, KadRequestFunction, KadResponse, KadResponseFunction, SignedKadMessage};
+use crate::util::bucket;
 
-#[derive(Serialize,Deserialize,Debug, PartialEq, Eq, Clone, Hash)]
+// This derive is technically wrong, since we only take the id as a hash input, but everythong else as
+// Eq input
+#[derive(Serialize,Deserialize,Debug, PartialEq, Eq, Clone)]
 pub struct NodeInfo {
     socket_addr: SocketAddr,
     id: KadID,
+    // we may not yet know the key, only happens on bootstrap
+    pubkey: Option<PublicKey>,
 }
 
 impl NodeInfo {
@@ -29,6 +36,14 @@ impl NodeInfo {
 
     pub fn id(&self) -> &KadID {
         &self.id
+    }
+
+    pub fn pub_key(&self) -> &Option<PublicKey> { &self.pubkey }
+}
+
+impl Hash for NodeInfo {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write(self.id.as_ref())
     }
 }
 
@@ -63,6 +78,7 @@ pub enum LookupResult {
 
 #[derive(Debug, Serialize,Deserialize)]
 pub struct LocalNodeData {
+    local_keypair: Keypair,
     local_id: KadID,
     buckets: Vec<KadBucket>, // Vec aqui é ineficiente, mas é simples de implementar
     storage: HashMap<KadID, Vec<u8>>,
@@ -70,14 +86,6 @@ pub struct LocalNodeData {
 }
 
 impl LocalNodeData {
-    fn empty() -> Self {
-        LocalNodeData {
-            local_id: KadID::zeroes(),
-            buckets: Vec::new(),
-            storage: HashMap::new()
-        }
-    }
-
     fn update_node(&mut self, node_data: NodeInfo) {
         let distance = &self.local_id ^ node_data.id();
         let target_bucket = bucket(&distance);
@@ -148,7 +156,7 @@ pub struct LocalNodeBuilder {
 
 impl LocalNodeBuilder {
     pub fn start_empty(local_socket: UdpSocket) -> Self {
-        let id = KadID::random();
+        let (id, keypair) = KadID::random_secure();
         let mut b: Vec<_> = Default::default();
         b.resize_with(161, Default::default);
         let s = Default::default();
@@ -159,6 +167,7 @@ impl LocalNodeBuilder {
                 local_id: id,
                 buckets: b,
                 storage: s,
+                local_keypair: keypair
             },
             bootstrap: true,
             bootstrap_addr: None
@@ -184,19 +193,26 @@ impl LocalNodeBuilder {
         self
     }
 
-    pub async fn build(mut self) -> LocalNode {
+    pub async fn build(self) -> LocalNode {
+        let LocalNodeBuilder {
+            local_socket,
+            data,
+            bootstrap,
+            bootstrap_addr
+        } = self;
+
         let local_info = NodeInfo {
-            id: self.data.local_id.clone(),
-            socket_addr: self.local_socket.local_addr().unwrap()
+            id: data.local_id.clone(),
+            socket_addr: local_socket.local_addr().unwrap(),
+            pubkey: Some(data.local_keypair.public)
         };
         let tasks = Vec::new();
         let pending_reqs = Mutex::new(HashMap::new());
-        let data = mem::replace(&mut self.data, LocalNodeData::empty());
 
         let result = Arc::new(LocalNodeInner {
             data: Mutex::new(data),
             local_info,
-            local_socket: Arc::new(self.local_socket),
+            local_socket: Arc::new(local_socket),
             tasks: Mutex::new(tasks),
             pending_reqs
         });
@@ -212,8 +228,8 @@ impl LocalNodeBuilder {
             tasks.push(h1);
             let h2 = tokio::spawn(result.clone().bucket_refresher());
             tasks.push(h2);
-            if self.bootstrap {
-                let h3 = tokio::spawn(result.clone().bootstrap_routing_table(self.bootstrap_addr));
+            if bootstrap {
+                let h3 = tokio::spawn(result.clone().bootstrap_routing_table(bootstrap_addr));
                 tasks.push(h3);
             }
         }
@@ -239,7 +255,7 @@ struct LocalNodeInner {
 }
 
 impl LocalNodeInner {
-    async fn message_handler(self: Arc<Self>, mut rx: Receiver<KadMessage>) {
+    async fn message_handler(self: Arc<Self>, mut rx: Receiver<SignedKadMessage>) {
         info!("Start message handler");
         loop {
             let message = match rx.recv().await {
@@ -249,6 +265,17 @@ impl LocalNodeInner {
                     break;
                 }
                 Some(m) => m,
+            };
+            let message = match message.verify_deserialize() {
+                Ok(Some(m)) => {m},
+                Ok(None) => {
+                    error!("Pubkey and KadID do not match or crypto puzzle is invalid. Ignoring.");
+                    continue;
+                }
+                Err(e) => {
+                    error!("Deserialization Failed or bad signature. Error:\n{:?}", e);
+                    continue;
+                }
             };
             match message.payload {
                 KadMessagePayload::Request(r) => {
@@ -289,6 +316,7 @@ impl LocalNodeInner {
             let target_info = NodeInfo {
                 id: KadID::zeroes(),
                 socket_addr: addr,
+                pubkey: None
             };
             let (tx, mut rx) = channel(10);
 
@@ -346,12 +374,17 @@ impl LocalNodeInner {
 
 
         let msg = KadMessage {
+            timestamp: OffsetDateTime::now_utc(),
             sender: self.local_info.clone(),
             payload: KadMessagePayload::Request(KadRequest {
                 uid: *uid.as_ref(),
                 function: payload,
             })
         };
+        let msg = {
+            let data = self.data.lock().unwrap();
+            SignedKadMessage::sign_serialize(msg, &data.local_keypair)
+        }.unwrap();
 
         rpc::exec::send_message(&self.local_socket, &msg, &target).await.unwrap();
 
@@ -644,9 +677,14 @@ impl LocalNodeInner {
         };
 
         let message = KadMessage {
+            timestamp: OffsetDateTime::now_utc(),
             sender: self.local_info.clone(),
             payload: KadMessagePayload::Response(response)
         };
+        let message = {
+            let data = self.data.lock().unwrap();
+            SignedKadMessage::sign_serialize(message, &data.local_keypair)
+        }.unwrap();
 
         rpc::exec::send_message(&self.local_socket, &message, &origin).await.unwrap()
     }

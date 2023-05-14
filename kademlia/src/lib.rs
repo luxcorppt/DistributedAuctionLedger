@@ -4,7 +4,7 @@ mod rpc;
 pub mod node;
 pub mod kadid;
 mod buckets;
-
+mod util;
 
 
 use thiserror::Error;
@@ -31,6 +31,9 @@ const BUCKET_REFRESH_INTERVAL: i64 = 3600;
 const REQUEST_TIMEOUT: i64 = 300;
 
 const MAX_MESSAGE_BUFFER: usize = 4096;
+
+const SECURE_KEY_C1: usize = 1;
+const SECURE_KEY_C2: usize = 2;
 
 #[derive(Error, Debug)]
 pub enum KadError {

@@ -1,8 +1,9 @@
 use std::fmt;
 use std::fmt::{Formatter, LowerHex};
-use seq_macro::seq;
 use serde_derive::{Deserialize, Serialize};
-use std::ops::{BitXor, Index, IndexMut};
+use std::ops::{BitXor};
+use ed25519_dalek_fiat::{Keypair, PublicKey};
+use crate::{SECURE_KEY_C1, util};
 
 #[derive(Serialize,Deserialize,Eq, PartialEq, Hash, Debug, Clone)]
 pub struct KadID([u8; 20]);
@@ -18,6 +19,37 @@ impl KadID {
         let mut val = [0u8; 20];
         rng.fill_bytes(&mut val);
         KadID(val)
+    }
+
+    pub(crate) fn random_secure() -> (Self, Keypair) {
+        use rand::{rngs};
+        let (id, pair) = loop {
+            let pair = Keypair::generate(&mut rngs::ThreadRng::default());
+            let (h1, h2) = Self::internal_c1_verify(&pair.public);
+            if util::get_leading_zeros(&h2) > SECURE_KEY_C1 as u8 {
+                break (h1, pair);
+            }
+        };
+        (KadID(id), pair)
+    }
+
+    pub(crate) fn into_array(self) -> [u8;20] {
+        self.0
+    }
+
+    fn internal_c1_verify(pkey: &PublicKey) -> ([u8; 20], [u8; 20]) {
+        let mut hasher = sha1_smol::Sha1::new();
+        hasher.update(pkey.as_ref());
+        let h1 = hasher.digest().bytes();
+        hasher.reset();
+        hasher.update(&h1);
+        let h2 = hasher.digest().bytes();
+        (h1, h2)
+    }
+
+    pub(crate) fn verify_c1(&self, pkey: &PublicKey) -> bool {
+        let (h1, h2) = Self::internal_c1_verify(pkey);
+        h1 == self.0 && util::get_leading_zeros(&h2) > SECURE_KEY_C1 as u8
     }
 
     // same as above, but falls within [2^i, 2^(i+1)[ distance of the origin,
@@ -91,13 +123,10 @@ impl BitXor for &KadID {
 
     #[inline]
     fn bitxor(self, rhs: Self) -> Self::Output {
-        let mut result = [0u8; 20];
-        seq!(N in 0..20 {
-            *result.index_mut(N) = self.0.index(N) ^ rhs.0.index(N);
-        });
-        result
+        util::xor_bytes(self.as_ref(), rhs.as_ref())
     }
 }
+
 
 impl AsRef<[u8; 20]> for KadID {
     fn as_ref(&self) -> &[u8; 20] {
@@ -105,23 +134,11 @@ impl AsRef<[u8; 20]> for KadID {
     }
 }
 
-pub fn bucket(distance: &[u8; 20]) -> u8 {
-    let mut result = 0u8;
-    for u in distance {
-        if *u == 0 { result += 8; }
-        else {
-            let temp: u8 = u.leading_zeros().try_into().expect("Called leading zeros on a u8, got a value above 255");
-            result += temp;
-            break;
-        }
-    }
-    160 - result
-}
-
 
 #[cfg(test)]
 mod tests {
-    use crate::kadid::{bucket, KadID};
+    use crate::kadid::KadID;
+    use crate::util::bucket;
 
     #[test]
     fn bucket_fn_tests() {
