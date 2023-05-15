@@ -8,7 +8,11 @@ mod chain;
 mod clients;
 mod merkle;
 
-fn main(){
+fn main() {
+    test_blockchain_pow()
+}
+
+fn test_merkle_tree(){
     let transactions = Vec::from([
         Transaction::new(0),
         Transaction::new(1),
@@ -27,7 +31,7 @@ fn main(){
         Transaction::new(14),
         Transaction::new(15)
     ]);
-    let  tree = merkle::MerkleTree::from_transactions(transactions);
+    let tree = merkle::MerkleTree::from_transactions(transactions);
 
     println!("Valid: {} | {:?}", tree.valid(), tree);
 }
@@ -53,7 +57,7 @@ fn test_blockchain_pos() {
 
 fn test_blockchain_pow(){
     let tm = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos();
-    let block = Block::new(1, tm, vec![5; 8], vec![], 1);
+    let block = Block::new(1, tm, vec![255; 20], vec![], 2);
     let block = block.complete_pow();
     println!("{:?}", block);
     let mut chain = chain::Chain::new();
@@ -63,7 +67,7 @@ fn test_blockchain_pow(){
 
     let blk = chain.get_last().unwrap();
     let tm = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos();
-    let new_block = Block::new(blk.get_index()+1, tm, Vec::from(blk.block_hash()), vec![], blk.get_difficulty().clone());
+    let new_block = Block::new(blk.get_index()+1, tm, blk.block_hash().to_vec(), vec![], blk.get_difficulty().clone());
     let new_block = new_block.complete_pow();
     println!("{:?}", new_block);
     chain.add(BlockComplete::POW(new_block)).expect("Error Adding second block");

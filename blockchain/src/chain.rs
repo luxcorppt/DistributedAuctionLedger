@@ -1,5 +1,8 @@
+use std::cmp::Ordering;
 use crate::block::{BlockComplete};
 use crate::chain::ChainError::{NotNextBlock, NotValidBlock};
+use compare::Compare;
+use std::cmp::Ordering::{Equal, Greater, Less};
 
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug};
@@ -50,5 +53,16 @@ impl Chain {
 
     pub fn get_number_of_blocks(&self) -> usize {
         self.chain.len()
+    }
+}
+
+fn compare_chains(ch1: &Chain, ch2: &Chain) -> Ordering {
+    let cmp = compare::natural();
+    match cmp.compare(&ch1.get_number_of_blocks(), &ch2.get_number_of_blocks()) {
+        Less => { Greater }
+        Greater => { Less }
+        Equal => {
+            Equal
+        }
     }
 }

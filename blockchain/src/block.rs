@@ -1,10 +1,7 @@
-use std::fmt::{Debug};
+use std::fmt::Debug;
 use serde::{Deserialize, Serialize};
 use sha1::Digest;
 use auction_common::Transaction;
-use crate::chain::{Chain};
-use compare::{Compare};
-use std::cmp::Ordering::{Less, Equal, Greater};
 use utils::get_hash;
 use crate::merkle::MerkleTree;
 
@@ -58,7 +55,7 @@ impl Block {
         BlockCompletePoS {
             signing_id,
             signature,
-            bloc<k_inner: self
+            block_inner: self
         }
     }
 }
@@ -199,33 +196,8 @@ impl BlockCompletePoS {
 
 fn verify_block_difficulty(block: &Block, hash: &[u8]) -> bool {
     let hex = hex::encode(hash).into_bytes();
-    let zeros = get_leading_zeros(&hex);
+    let zeros = utils::get_leading_zeros(&hex);
     zeros as u64 >= block.difficulty
-}
-
-fn compare_blockchains(ch1: &Chain, ch2: &Chain) -> () {
-    let cmp = compare::natural();
-    match cmp.compare(&ch1.get_number_of_blocks(), &ch2.get_number_of_blocks()) {
-        Less | Greater => {
-            Equal;
-        }
-        Equal => {
-            Equal;
-        }
-    }
-    todo!()
-}
-
-fn get_leading_zeros(array: &Vec<u8>) -> u8 {
-    let mut result = 0u8;
-    for u in array {
-        if *u == 0 { result += 8; } else {
-            let temp: u8 = u.leading_zeros().try_into().expect("Called leading zeros on a u8, got a value above 255");
-            result += temp;
-            break;
-        }
-    }
-    result
 }
 
 #[cfg(test)]
