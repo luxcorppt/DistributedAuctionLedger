@@ -5,6 +5,7 @@ use auction_common::Transaction;
 use crate::chain::{Chain};
 use compare::{Compare};
 use std::cmp::Ordering::{Less, Equal, Greater};
+use utils::get_hash;
 use crate::merkle::MerkleTree;
 
 pub enum BlockError {
@@ -42,8 +43,7 @@ impl Block {
 
     pub fn complete_pow(mut self) -> BlockCompletePoW {
         loop {
-            let bytes_block = bincode::serialize(&self).unwrap();
-            let digest = sha1::Sha1::digest(&bytes_block);
+            let digest = get_hash(&[&self]);
             if verify_block_difficulty(&self, &digest[..]) {
                 return BlockCompletePoW {
                     hash: digest.to_vec(),
@@ -58,7 +58,7 @@ impl Block {
         BlockCompletePoS {
             signing_id,
             signature,
-            block_inner: self
+            bloc<k_inner: self
         }
     }
 }
@@ -145,9 +145,7 @@ impl BlockCompletePoW {
     }
 
     fn is_valid(&self) -> bool {
-        let bytes = bincode::serialize(&self.block_inner).unwrap();
-        let digest_trusted = sha1::Sha1::digest(&bytes).to_vec();
-        if digest_trusted != self.hash {
+        if get_hash(&[&self.block_inner]) != self.hash {
             return false;
         }
         verify_block_difficulty(&self.block_inner, &self.hash[..])
