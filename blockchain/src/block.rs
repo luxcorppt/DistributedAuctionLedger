@@ -1,4 +1,3 @@
-use std::cmp::Ordering;
 use std::fmt::{Debug};
 use serde::{Deserialize, Serialize};
 use sha1::Digest;
@@ -20,17 +19,25 @@ pub struct Block{
     prev_hash: Vec<u8>,
     nonce: u64,
     transactions: Vec<Transaction>,
-    merkle: MerkleTree,
+    merkle: Vec<u8>,
     difficulty: u64
 }
 
 impl Block {
     pub fn new(index: u32, timestamp: u128, prev_hash: Vec<u8>, transactions: Vec<Transaction>, difficulty: u64) -> Self {
-        //let merkle = MerkleTree::from_transactions(transactions);
-        let merkle = MerkleTree::new();
-        Block {
-            index, timestamp, prev_hash, nonce: 0, transactions, merkle, difficulty
+        match MerkleTree::from_transactions(transactions.clone()).get_root_hash() {
+            None => {
+                Block {
+                    index, timestamp, prev_hash, nonce: 0, transactions, merkle: Vec::new(), difficulty
+                }
+            }
+            Some(merkle) => {
+                Block {
+                    index, timestamp, prev_hash, nonce: 0, transactions, merkle, difficulty
+                }
+            }
         }
+
     }
 
     pub fn complete_pow(mut self) -> BlockCompletePoW {

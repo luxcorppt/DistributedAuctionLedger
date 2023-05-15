@@ -25,11 +25,11 @@ fn main(){
         Transaction::new(12),
         Transaction::new(13),
         Transaction::new(14),
-        Transaction::new(15),
-        Transaction::new(16)
+        Transaction::new(15)
     ]);
-    let tree = merkle::MerkleTree::from_transactions(transactions);
-    println!("{:?}", tree)
+    let  tree = merkle::MerkleTree::from_transactions(transactions);
+
+    println!("Valid: {} | {:?}", tree.valid(), tree);
 }
 
 fn test_blockchain_pos() {
@@ -41,7 +41,7 @@ fn test_blockchain_pos() {
     let pk = keypair.public_key_raw();
     let bytes = bincode::serialize(&block).unwrap();
 
-    Sign
+    // Sign
 
     let block = block.complete_pos(vec![], vec![]);
     println!("{:?}", block);

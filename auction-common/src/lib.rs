@@ -5,18 +5,17 @@ use serde::{Serialize, Deserialize};
 
 use compare::{Compare};
 use std::cmp::Ordering::{Less, Equal, Greater};
-use std::os::unix::raw::time_t;
 use std::time::SystemTime;
 
 type UserPubKey = Vec<u8>;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, Ord, PartialOrd, Eq, PartialEq)]
 struct TransactionEntry {
     user: UserPubKey,
     amount: u64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, Ord, PartialOrd, Eq, PartialEq)]
 struct TransactionSigning {
     sources: [TransactionEntry; 8],
     destinations: [TransactionEntry; 8],
@@ -24,7 +23,7 @@ struct TransactionSigning {
 
 type Signature = Vec<u8>;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialOrd, Eq, PartialEq)]
 pub struct Transaction {
     body: TransactionSigning,
     timestamp: u128,
@@ -79,24 +78,8 @@ impl Transaction {
     }
 }
 
-impl Eq for Transaction {}
-
-impl PartialEq<Self> for Transaction {
-    fn eq(&self, other: &Self) -> bool {
-        todo!()
-    }
-}
-
-impl PartialOrd<Self> for Transaction {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        let cmp = compare::natural();
-        Some(cmp.compare(&self.timestamp, &other.timestamp))
-    }
-}
-
 impl Ord for Transaction {
     fn cmp(&self, other: &Self) -> Ordering {
-        let cmp = compare::natural();
-        cmp.compare(&self.timestamp, &other.timestamp)
+        compare::natural().compare(&self.timestamp, &other.timestamp)
     }
 }
