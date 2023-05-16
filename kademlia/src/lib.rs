@@ -35,6 +35,9 @@ const MAX_MESSAGE_BUFFER: usize = 4096;
 const SECURE_KEY_C1: usize = 1;
 const SECURE_KEY_C2: usize = 2;
 
+const BROADCAST_CACHE_LIMIT: u64 = 4096;
+const BROADCAST_AGE_LIMIT_SECS: u64 = 300;
+
 #[derive(Error, Debug)]
 pub enum KadError {
     #[error("Failed to deserialize Node data")]

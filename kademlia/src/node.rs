@@ -10,10 +10,11 @@ use itertools::{EitherOrBoth, Itertools};
 use log::{debug, error, info, warn};
 use time::OffsetDateTime;
 use tokio::net::UdpSocket;
+use tokio::sync::broadcast::error::{RecvError};
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::sync::mpsc::Receiver;
 use tokio::task::JoinHandle;
-use crate::{ALPHA, BUCKET_REFRESH_INTERVAL, K, KadError, MAX_MESSAGE_BUFFER, REQUEST_TIMEOUT, Result, rpc};
+use crate::{ALPHA, BROADCAST_AGE_LIMIT_SECS, BROADCAST_CACHE_LIMIT, BUCKET_REFRESH_INTERVAL, K, KadError, MAX_MESSAGE_BUFFER, REQUEST_TIMEOUT, Result, rpc};
 use crate::buckets::KadBucket;
 use crate::kadid::KadID;
 use crate::rpc::data::{KadFindValueResponse, KadMessage, KadMessagePayload, KadRequest, KadRequestFunction, KadResponse, KadResponseFunction, SignedKadMessage};
@@ -81,7 +82,7 @@ pub struct LocalNodeData {
     local_keypair: Keypair,
     local_id: KadID,
     buckets: Vec<KadBucket>, // Vec aqui é ineficiente, mas é simples de implementar
-    storage: HashMap<KadID, Vec<u8>>,
+    storage: HashMap<KadID, Vec<u8>>, // No eviction = Easier to test. TODO: Replace with moka cache for key eviction.
     // OPTIONAL: Implement Lookup caching
 }
 
@@ -208,13 +209,20 @@ impl LocalNodeBuilder {
         };
         let tasks = Vec::new();
         let pending_reqs = Mutex::new(HashMap::new());
+        let broadcast_store = moka::future::Cache::builder()
+            // TODO: Limit the alive broadcasts accepted
+            .time_to_live(Duration::from_secs(BROADCAST_AGE_LIMIT_SECS))
+            .build();
+        let (bcast_tx, mut bcast_rx) = tokio::sync::broadcast::channel(BROADCAST_CACHE_LIMIT as usize);
 
         let result = Arc::new(LocalNodeInner {
             data: Mutex::new(data),
             local_info,
             local_socket: Arc::new(local_socket),
             tasks: Mutex::new(tasks),
-            pending_reqs
+            pending_reqs,
+            broadcast_store,
+            broadcast_sender: bcast_tx,
         });
 
         let (message_tx, message_rx) = channel(MAX_MESSAGE_BUFFER);
@@ -232,6 +240,21 @@ impl LocalNodeBuilder {
                 let h3 = tokio::spawn(result.clone().bootstrap_routing_table(bootstrap_addr));
                 tasks.push(h3);
             }
+            let h4 = tokio::spawn(async move { // async broadcast logger
+                loop {
+                    match bcast_rx.recv().await {
+                        Ok(val) => {debug!("Received broadcast: {:?}", val)}
+                        Err(RecvError::Closed) => {
+                            error!("Send side for broadcasts dropped. Terminating.");
+                            break;
+                        }
+                        Err(RecvError::Lagged(skipped)) => {
+                            warn!("Debug logger skipped {} broadcasts due to load.", skipped);
+                        }
+                    }
+                }
+            });
+            tasks.push(h4);
         }
 
         LocalNode {
@@ -251,7 +274,9 @@ struct LocalNodeInner {
     local_socket: Arc<UdpSocket>,
     data: Mutex<LocalNodeData>,
     tasks: Mutex<Vec<JoinHandle<()>>>,
-    pending_reqs: PendingReqsMap
+    pending_reqs: PendingReqsMap,
+    broadcast_store: moka::future::Cache<[u8; 20], ()>,
+    broadcast_sender: tokio::sync::broadcast::Sender<Vec<u8>>,
 }
 
 impl LocalNodeInner {
@@ -279,7 +304,7 @@ impl LocalNodeInner {
             };
             match message.payload {
                 KadMessagePayload::Request(r) => {
-                    self.clone().handle_request(r, message.sender).await;
+                    self.clone().handle_request(r, message.sender, message.timestamp).await;
                 }
                 KadMessagePayload::Response(r) => {
                     self.clone().handle_response(r, message.sender).await;
@@ -636,9 +661,9 @@ impl LocalNodeInner {
         *concurrency_count += 1;
     }
 
-    async fn handle_request(self: Arc<Self>, request: KadRequest, origin: NodeInfo) {
+    async fn handle_request(self: Arc<Self>, request: KadRequest, origin: NodeInfo, ts: OffsetDateTime) {
         self.clone().update_routing_table(origin.clone());
-        let response = match &request.function {
+        let response = match request.function {
             KadRequestFunction::Ping => {
                 KadResponse {
                     uid: request.uid,
@@ -653,7 +678,7 @@ impl LocalNodeInner {
                 }
             }
             KadRequestFunction::FindNode { id } => {
-                let nodes = self.data.lock().unwrap().get_closest_nodes(id, ALPHA as usize);
+                let nodes = self.data.lock().unwrap().get_closest_nodes(&id, ALPHA as usize);
                 KadResponse {
                     uid: request.uid,
                     function: KadResponseFunction::FindNode {
@@ -663,15 +688,33 @@ impl LocalNodeInner {
             }
             KadRequestFunction::FindValue { key } => {
                 let data = self.data.lock().unwrap();
-                let fv_result = if let Some(value) = data.storage.get(key) {
+                let fv_result = if let Some(value) = data.storage.get(&key) {
                     KadFindValueResponse::Found(value.clone())
                 } else {
-                    let nodes = data.get_closest_nodes(key, ALPHA as usize);
+                    let nodes = data.get_closest_nodes(&key, ALPHA as usize);
                     KadFindValueResponse::Next(nodes)
                 };
                 KadResponse {
                     uid: request.uid,
                     function: KadResponseFunction::FindValue(fv_result),
+                }
+            }
+            KadRequestFunction::Broadcast(info) => {
+                if OffsetDateTime::now_utc() - ts <= Duration::from_secs(BROADCAST_AGE_LIMIT_SECS)
+                 && !self.broadcast_store.contains_key(&request.uid) {
+                    self.broadcast_store.insert(request.uid, ()).await;
+                    match self.broadcast_sender.send(info.clone()) {
+                        Ok(v) => {
+                            debug!("Broadcast received info to {} receivers", v)
+                        }
+                        Err(_) => {}
+                    }
+                    // propagate
+                    let _ = tokio::spawn(self.clone().request_broadcast(info));
+                }
+                KadResponse {
+                    uid: request.uid,
+                    function: KadResponseFunction::Ping
                 }
             }
         };
@@ -720,6 +763,24 @@ impl LocalNodeInner {
             Some(x) => x,
         }
     }
+
+    async fn request_broadcast(self: Arc<Self>, info: Vec<u8>) {
+        let (tx,mut rx) = channel(MAX_MESSAGE_BUFFER);
+        let nodes = {
+            let data = self.data.lock().unwrap();
+            data.get_closest_nodes(self.local_info.id(), ALPHA as usize)
+        };
+        for node in nodes {
+            let request = KadRequestFunction::Broadcast(info.clone());
+            self.clone().do_rpc_request_impl(node, request, tx.clone()).await;
+        }
+        match rx.recv().await {
+            Some(Some(val)) => {
+                debug!("Got response to broadcast: {:?}", val);
+            }
+            _ => {}
+        }
+    }
 }
 
 impl LocalNode {
@@ -740,6 +801,10 @@ impl LocalNode {
         }
 
         result
+    }
+
+    pub fn subscribe_bcasts(&self) -> tokio::sync::broadcast::Receiver<Vec<u8>> {
+        self.inner.broadcast_sender.subscribe()
     }
 
     pub fn print_storage(&self) -> String {
@@ -769,6 +834,10 @@ impl LocalNode {
         } else {
             None
         }
+    }
+
+    pub async fn broadcast(&self, info: Vec<u8>) {
+        self.inner.clone().request_broadcast(info).await
     }
 
     pub async fn destroy_serialized(self) -> String {

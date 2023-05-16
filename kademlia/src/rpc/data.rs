@@ -106,6 +106,7 @@ pub(crate) enum KadRequestFunction {
     Store { key: KadID, value: Vec<u8> },
     FindNode { id: KadID },
     FindValue { key: KadID },
+    Broadcast(Vec<u8>)
 }
 
 #[derive(Serialize,Deserialize,Debug)]
