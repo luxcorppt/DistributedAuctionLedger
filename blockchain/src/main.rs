@@ -9,11 +9,11 @@ mod clients;
 mod merkle;
 
 fn main() {
-    test_blockchain_pow()
+    test_merkle_tree()
 }
 
 fn test_merkle_tree(){
-    let transactions = Vec::from([
+    let mut transactions = Vec::from([
         Transaction::new(0),
         Transaction::new(1),
         Transaction::new(2),
@@ -31,7 +31,7 @@ fn test_merkle_tree(){
         Transaction::new(14),
         Transaction::new(15)
     ]);
-    let tree = merkle::MerkleTree::from_transactions(transactions);
+    let tree = merkle::MerkleTree::from_transactions(&mut transactions);
 
     println!("Valid: {} | {:?}", tree.valid(), tree);
 }

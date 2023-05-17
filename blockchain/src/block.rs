@@ -1,9 +1,10 @@
 use std::fmt::Debug;
+use ed25519_dalek_fiat::{SignatureError, Verifier};
 use serde::{Deserialize, Serialize};
-use sha1::Digest;
 use auction_common::Transaction;
 use utils::get_hash;
 use crate::merkle::MerkleTree;
+
 
 pub enum BlockError {
     DeserializeError,
@@ -22,11 +23,11 @@ pub struct Block{
 }
 
 impl Block {
-    pub fn new(index: u32, timestamp: u128, prev_hash: Vec<u8>, transactions: Vec<Transaction>, difficulty: u64) -> Self {
-        match MerkleTree::from_transactions(transactions.clone()).get_root_hash() {
+    pub fn new(index: u32, timestamp: u128, prev_hash: Vec<u8>, mut transactions: Vec<Transaction>, difficulty: u64) -> Self {
+        match MerkleTree::from_transactions(&mut transactions).get_root_hash() {
             None => {
                 Block {
-                    index, timestamp, prev_hash, nonce: 0, transactions, merkle: Vec::new(), difficulty
+                    index, timestamp, prev_hash, nonce: 0, transactions, merkle: vec![255; 20], difficulty
                 }
             }
             Some(merkle) => {
@@ -51,6 +52,7 @@ impl Block {
         }
     }
 
+    // pub fn complete_pos(self, signing_id: &[u8; 32], signature: &[u8; 64]) -> BlockCompletePoS {
     pub fn complete_pos(self, signing_id: Vec<u8>, signature: Vec<u8>) -> BlockCompletePoS {
         BlockCompletePoS {
             signing_id,
@@ -173,7 +175,18 @@ impl BlockCompletePoW {
 impl BlockCompletePoS {
 
     pub fn is_valid(&self) -> bool {
-        todo!("is Valid Block POS verify signature if signature is valid for signer id")
+        // TODO: ("is Valid Block POS verify signature if signature is valid for signer id")
+        let pk = ed25519_dalek_fiat::PublicKey::from_bytes(&self.signing_id.as_slice()).unwrap();
+        let sig = ed25519_dalek_fiat::Signature::from_bytes(&self.signature[..]).unwrap();
+        let bytes = &bincode::serialize(&self.block_inner).unwrap()[..]
+        match pk.verify(bytes, &sig) {
+            Ok(_) => {
+                true
+            }
+            _ => {
+                false
+            }
+        }
     }
 
     pub fn block_hash(&self) -> &[u8] {

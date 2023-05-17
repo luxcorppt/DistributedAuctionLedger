@@ -1,11 +1,11 @@
-use std::cmp::Ordering;
-use crate::block::{BlockComplete};
+use std::cmp::{min, Ordering};
+use crate::block::{Block, BlockComplete};
 use crate::chain::ChainError::{NotNextBlock, NotValidBlock};
-use compare::Compare;
 use std::cmp::Ordering::{Equal, Greater, Less};
 
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug};
+use std::slice::Iter;
 
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -39,6 +39,16 @@ impl Chain {
         Ok(())
     }
 
+    pub fn iter(&self) -> Iter<'_, BlockComplete> {
+        self.chain.iter()
+    }
+
+    pub fn find(&self, hash: &[u8]) -> Option<&BlockComplete> {
+        self.chain.iter().find(|b| {
+            b.block_hash() == hash
+        })
+    }
+
     pub fn get_last(&self) -> Option<&BlockComplete> {
         self.chain.last()
     }
@@ -51,14 +61,20 @@ impl Chain {
         println!("\n\n");
     }
 
+    pub fn get(&self, index: usize) -> Option<&BlockComplete> {
+        if index >= self.chain.len() {
+            return None
+        }
+        Some(&self.chain[index])
+    }
+
     pub fn get_number_of_blocks(&self) -> usize {
         self.chain.len()
     }
 }
 
 fn compare_chains(ch1: &Chain, ch2: &Chain) -> Ordering {
-    let cmp = compare::natural();
-    match cmp.compare(&ch1.get_number_of_blocks(), &ch2.get_number_of_blocks()) {
+     match ch1.get_number_of_blocks().cmp(&ch2.get_number_of_blocks()) {
         Less => { Greater }
         Greater => { Less }
         Equal => {

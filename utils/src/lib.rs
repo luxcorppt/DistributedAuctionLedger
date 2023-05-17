@@ -2,8 +2,8 @@ use sha1::Digest;
 use serde::{Deserialize, Serialize};
 
 pub type HASH = Vec<u8>;
-
-
+pub type PubK = Vec<u8>;
+pub type Signature = Vec<u8>;
 
 // [u8; 20]
 pub fn get_hash<T :Serialize>(arr: &[T]) -> Vec<u8> {

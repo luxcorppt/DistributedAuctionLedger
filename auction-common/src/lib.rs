@@ -3,7 +3,6 @@
 use std::cmp::{Ord, Ordering};
 use serde::{Serialize, Deserialize};
 
-use compare::{Compare};
 use std::cmp::Ordering::{Less, Equal, Greater};
 use std::time::SystemTime;
 
@@ -23,7 +22,7 @@ struct TransactionSigning {
 
 type Signature = Vec<u8>;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialOrd, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub struct Transaction {
     body: TransactionSigning,
     timestamp: u128,
@@ -78,8 +77,14 @@ impl Transaction {
     }
 }
 
+impl PartialOrd<Self> for Transaction {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.timestamp.partial_cmp(&other.timestamp)
+    }
+}
+
 impl Ord for Transaction {
     fn cmp(&self, other: &Self) -> Ordering {
-        compare::natural().compare(&self.timestamp, &other.timestamp)
+        self.timestamp.cmp(&other.timestamp)
     }
 }
