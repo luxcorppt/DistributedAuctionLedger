@@ -292,13 +292,9 @@ impl LocalNodeInner {
                 Some(m) => m,
             };
             let message = match message.verify_deserialize() {
-                Ok(Some(m)) => {m},
-                Ok(None) => {
-                    error!("Pubkey and KadID do not match or crypto puzzle is invalid. Ignoring.");
-                    continue;
-                }
+                Ok(m) => {m},
                 Err(e) => {
-                    error!("Deserialization Failed or bad signature. Error:\n{:?}", e);
+                    error!("Deserialization Failed or bad security. Error:\n{:?}", e);
                     continue;
                 }
             };
@@ -461,7 +457,7 @@ impl LocalNodeInner {
             &node.id ^ &key
         }).min() {
             None => {
-                todo!("Handle lookup when no nodes to start")
+                return LookupResult::Nodes(Vec::default());
             }
             Some(m) => m,
         };
