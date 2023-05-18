@@ -5,6 +5,7 @@
       <sourceFolder url="file://$MODULE_DIR$/auction-common/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/blockchain/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/kademlia/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/utils/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/kademlia/examples" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>

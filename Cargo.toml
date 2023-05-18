@@ -3,5 +3,6 @@
 members = [
 	"auction-common",
 	"blockchain",
-    "kademlia"
+    "kademlia",
+	"utils"
 ]
