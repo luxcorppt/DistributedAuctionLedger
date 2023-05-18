@@ -4,13 +4,13 @@ use serde::{Serialize, Deserialize};
 
 type UserPubKey = Vec<u8>;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 struct TransactionEntry {
     user: UserPubKey,
     amount: u64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 struct TransactionSigning {
     sources: [TransactionEntry; 8],
     destinations: [TransactionEntry; 8],
@@ -18,8 +18,8 @@ struct TransactionSigning {
 
 type Signature = Vec<u8>;
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Transaction {
+#[derive(Serialize, Deserialize)]
+struct Transaction {
     body: TransactionSigning,
     signatures: [Signature; 8]
 }
