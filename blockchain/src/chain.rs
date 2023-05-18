@@ -1,5 +1,5 @@
-use std::cmp::{min, Ordering};
-use crate::block::{Block, BlockComplete};
+use std::cmp::{Ordering};
+use crate::block::{BlockComplete};
 use crate::chain::ChainError::{NotNextBlock, NotValidBlock};
 use std::cmp::Ordering::{Equal, Greater, Less};
 

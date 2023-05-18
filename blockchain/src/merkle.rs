@@ -1,7 +1,5 @@
-use sha1::Digest;
 use std::fmt::{Debug};
 use std::ops::Index;
-use serde::{Deserialize, Serialize};
 use auction_common::Transaction;
 use utils::get_hash;
 

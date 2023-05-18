@@ -1,5 +1,7 @@
+#![allow(unused)]
+
 use std::fmt::Debug;
-use ed25519_dalek_fiat::{SignatureError, Verifier};
+use ed25519_dalek_fiat::{Verifier};
 use serde::{Deserialize, Serialize};
 use auction_common::Transaction;
 use utils::get_hash;
@@ -178,7 +180,7 @@ impl BlockCompletePoS {
         // TODO: ("is Valid Block POS verify signature if signature is valid for signer id")
         let pk = ed25519_dalek_fiat::PublicKey::from_bytes(&self.signing_id.as_slice()).unwrap();
         let sig = ed25519_dalek_fiat::Signature::from_bytes(&self.signature[..]).unwrap();
-        let bytes = &bincode::serialize(&self.block_inner).unwrap()[..]
+        let bytes = &bincode::serialize(&self.block_inner).unwrap()[..];
         match pk.verify(bytes, &sig) {
             Ok(_) => {
                 true
