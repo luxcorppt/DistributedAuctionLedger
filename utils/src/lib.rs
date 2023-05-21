@@ -1,3 +1,4 @@
+use rand::{RngCore, rngs};
 use sha1::Digest;
 use serde::{Deserialize, Serialize};
 
@@ -24,4 +25,11 @@ pub fn get_leading_zeros(array: &Vec<u8>) -> u8 {
         }
     }
     result
+}
+
+pub fn random() -> Vec<u8> {
+    let mut rng = rngs::ThreadRng::default();
+    let mut val = [0u8; 20];
+    rng.fill_bytes(&mut val);
+    val.to_vec()
 }
