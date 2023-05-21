@@ -79,7 +79,7 @@ pub struct BlockCompletePoW {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BlockCompletePoS {
     signature: Vec<u8>,
-    signing_id: Vec<u8>, // TODO: Change type to KadID
+    signing_id: Vec<u8>,
     block_inner: Block
 }
 
