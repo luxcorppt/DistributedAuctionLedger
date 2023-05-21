@@ -1,5 +1,7 @@
 #![allow(unused)]
 
+pub mod auction;
+
 use std::cmp::{Ord, Ordering};
 use serde::{Serialize, Deserialize};
 
