@@ -94,8 +94,8 @@ fn load(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
 }
 
 fn create_auction(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
-    let name =args.get_one::<String>("name").unwrap().to_string();
-    let product =args.get_one::<String>("product").unwrap().to_string();
+    let name = args.get_one::<String>("name").unwrap().to_string();
+    let product = args.get_one::<String>("product").unwrap().to_string();
     let minimum: u64 = args.get_one::<String>("minimum").unwrap().parse().unwrap();
     let auction = Auction::new(context.me.as_ref().unwrap().public, name.to_string(), product, minimum);
     let bytes = bincode::serialize(&auction).unwrap();

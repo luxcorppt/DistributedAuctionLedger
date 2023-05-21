@@ -55,12 +55,12 @@ impl Block {
         }
     }
 
-    // pub fn complete_pos(self, signing_id: &[u8; 32], signature: &[u8; 64]) -> BlockCompletePoS {
-    pub fn complete_pos(self, signing_id: PublicKey, signature: Signature) -> BlockCompletePoS {
+    pub fn complete_pos(self, signing_id: PublicKey, signature: Signature, stake: u64) -> BlockCompletePoS {
         BlockCompletePoS {
             signing_id,
             signature,
             hash: get_hash(&[&self]),
+            stake,
             block_inner: self
         }
     }
@@ -83,6 +83,7 @@ pub struct BlockCompletePoS {
     signature: Signature,
     signing_id: PublicKey,
     hash: [u8; 20],
+    stake: u64,
     block_inner: Block
 }
 

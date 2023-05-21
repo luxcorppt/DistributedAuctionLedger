@@ -106,7 +106,7 @@ mod tests {
 
         let sig = keypair.sign(&bytes[..]);
 
-        let block_complete1 = block.complete_pos(keypair.public, sig);
+        let block_complete1 = block.complete_pos(keypair.public, sig, 50);
         println!("Block 1: {:?}", block_complete1);
 
         let tm = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos();
@@ -119,7 +119,7 @@ mod tests {
 
         let sig = keypair.sign(&bytes[..]);
 
-        let block_complete2 = block.complete_pos(keypair.public, sig);
+        let block_complete2 = block.complete_pos(keypair.public, sig, 50);
         println!("Block 2: {:?}", block_complete2);
 
         let mut chain = chain::Chain::new();
