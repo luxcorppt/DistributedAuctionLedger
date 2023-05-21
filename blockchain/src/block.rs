@@ -219,13 +219,3 @@ fn verify_block_difficulty(block: &Block, hash: &[u8]) -> bool {
     let zeros = utils::get_leading_zeros(&hex);
     zeros as u64 >= block.difficulty
 }
-
-#[cfg(test)]
-mod tests {
-
-    #[test]
-    fn test_verify_block_difficulty() {
-        eprintln!("O Sr. Andre esqueceu-se de implementar o teste");
-        assert!(true)
-    }
-}
