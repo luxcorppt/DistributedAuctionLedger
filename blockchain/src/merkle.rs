@@ -100,3 +100,37 @@ where
         valid_rec(tree, id_left(curr), max, leaf_verifier.clone()) &&
         valid_rec(tree, id_right(curr), max, leaf_verifier)
 }
+
+#[cfg(test)]
+mod tests {
+    use ed25519_dalek_fiat::{Signer};
+    use auction_common::Transaction;
+    use crate::block::{BlockComplete};
+    use crate::{merkle};
+
+    #[test]
+    fn test_merkle_tree() {
+        let mut transactions = Vec::from([
+            Transaction::new(0),
+            Transaction::new(1),
+            Transaction::new(2),
+            Transaction::new(3),
+            Transaction::new(4),
+            Transaction::new(5),
+            Transaction::new(6),
+            Transaction::new(7),
+            Transaction::new(8),
+            Transaction::new(9),
+            Transaction::new(10),
+            Transaction::new(11),
+            Transaction::new(12),
+            Transaction::new(13),
+            Transaction::new(14),
+            Transaction::new(15)
+        ]);
+        let tree = merkle::MerkleTree::from_transactions(&mut transactions);
+
+        println!("{:?}", tree);
+        assert!(tree.valid())
+    }
+}
