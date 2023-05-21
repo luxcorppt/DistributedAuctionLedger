@@ -1,6 +1,6 @@
 use std::fmt::{Debug};
 use std::ops::Index;
-use auction_common::Transaction;
+use auction_common::{Transaction, TransactionSigned};
 use utils::get_hash;
 
 // type MyHash = [u8; 20]; //[u8; 20];
@@ -14,13 +14,13 @@ use utils::get_hash;
 #[derive(Debug)]
 pub struct MerkleTree<'a> {
     tree: Vec<[u8; 20]>,
-    transactions: &'a Vec<Transaction>,
+    transactions: &'a Vec<TransactionSigned>,
     depth: u32
 }
 
 
 impl<'a> MerkleTree<'a> {
-    pub fn from_transactions(transactions: &'a mut Vec<Transaction>) -> Self {
+    pub fn from_transactions(transactions: &'a mut Vec<TransactionSigned>) -> Self {
         let depth = (transactions.len() as f32).log2().ceil() as u32;
         let max_leafs = (2_u32.pow(depth)) as usize;
         let n_internal_nodes = max_leafs - 1;
@@ -46,9 +46,8 @@ impl<'a> MerkleTree<'a> {
     }
 
     pub fn valid(&self) -> bool {
-        valid_rec(self, 0, self.get_number_nodes(), |i, hash| {
-            get_hash(&[&self.transactions[i]]) == *hash
-        })
+        valid_rec(self, 0, self.get_number_nodes(),
+                  |i, hash| get_hash(&[&self.transactions[i]]) == *hash)
     }
 
     pub fn get_depth(&self) -> &u32 {
@@ -89,7 +88,7 @@ where
 {
     // is a leaf Verify if transaction m
     if curr >= (max / 2) {
-        return leaf_verifier(curr - (max / 2), &tree[curr])
+        return curr - (max / 2) >= tree.transactions.len() || leaf_verifier(curr - (max / 2), &tree[curr])
     }
     let sons = [
         &tree[id_left(curr)],
@@ -103,31 +102,69 @@ where
 
 #[cfg(test)]
 mod tests {
-    use ed25519_dalek_fiat::{Signer};
-    use auction_common::Transaction;
-    use crate::block::{BlockComplete};
+    use ed25519_dalek_fiat::{Keypair, Signer};
+    use rand::rngs;
+    use auction_common::{Transaction, TransactionSemiSigned, TransactionSigned};
     use crate::{merkle};
+
+    fn sign_sender(transaction: Transaction, keypair: &Keypair) -> TransactionSemiSigned {
+        let sig = keypair.sign(&transaction.body_serialize().expect("Error signing")[..]);
+        transaction.sign(sig)
+    }
+
+    fn sign_receiver(transaction: TransactionSemiSigned, keypair: &Keypair) -> TransactionSigned {
+        let sig = keypair.sign(&transaction.body_serialize().expect("Error signing2")[..]);
+        transaction.sign(sig).expect("Error completing signing")
+    }
 
     #[test]
     fn test_merkle_tree() {
-        let mut transactions = Vec::from([
-            Transaction::new(0),
-            Transaction::new(1),
-            Transaction::new(2),
-            Transaction::new(3),
-            Transaction::new(4),
-            Transaction::new(5),
-            Transaction::new(6),
-            Transaction::new(7),
-            Transaction::new(8),
-            Transaction::new(9),
-            Transaction::new(10),
-            Transaction::new(11),
-            Transaction::new(12),
-            Transaction::new(13),
-            Transaction::new(14),
-            Transaction::new(15)
-        ]);
+        let mut rng = rngs::ThreadRng::default();
+        let sender = Keypair::generate(&mut rng);
+        let receiver = Keypair::generate(&mut rng);
+        let mut transactions = Vec::new();
+        for i in 0..45 {
+            transactions.push(Transaction::new(sender.public, receiver.public, i));
+        }
+        let transactions: Vec<_> = transactions.into_iter().map(|x| sign_sender(x, &sender)).collect();
+        let mut transactions: Vec<_> = transactions.into_iter().map(|x| sign_receiver(x, &receiver)).collect();
+
+        let tree = merkle::MerkleTree::from_transactions(&mut transactions);
+
+        println!("{:?}", tree);
+        assert!(tree.valid())
+    }
+
+    #[test]
+    fn test_merkle_tree2() {
+        let mut rng = rngs::ThreadRng::default();
+        let sender = Keypair::generate(&mut rng);
+        let receiver = Keypair::generate(&mut rng);
+        let mut transactions = Vec::new();
+        for i in 0..65 {
+            transactions.push(Transaction::new(sender.public, receiver.public, i));
+        }
+        let mut transactions: Vec<_> = transactions.into_iter().map(|x| sign_sender(x, &sender)).collect();
+        let mut transactions: Vec<_> = transactions.into_iter().map(|x| sign_receiver(x, &receiver)).collect();
+
+        let tree = merkle::MerkleTree::from_transactions(&mut transactions);
+
+        println!("{:?}", tree);
+        assert!(tree.valid())
+    }
+
+    #[test]
+    fn test_merkle_tree3() {
+        let mut rng = rngs::ThreadRng::default();
+        let sender = Keypair::generate(&mut rng);
+        let receiver = Keypair::generate(&mut rng);
+        let mut transactions = Vec::new();
+        for i in 0..7 {
+            transactions.push(Transaction::new(sender.public, receiver.public, i));
+        }
+        let transactions: Vec<_> = transactions.into_iter().map(|x| sign_sender(x, &sender)).collect();
+        let mut transactions: Vec<_> = transactions.into_iter().map(|x| sign_receiver(x, &receiver)).collect();
+
         let tree = merkle::MerkleTree::from_transactions(&mut transactions);
 
         println!("{:?}", tree);

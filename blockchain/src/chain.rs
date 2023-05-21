@@ -97,7 +97,7 @@ mod tests {
     #[test]
     fn test_blockchain_pos() {
         let tm = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos();
-        let block = Block::new(1, tm, [5; 20], vec![Transaction::new(2)], 1);
+        let block = Block::new(1, tm, [5; 20], vec![], 1);
 
         let mut rng = rngs::ThreadRng::default();
         let keypair = Keypair::generate(&mut rng);
@@ -110,7 +110,7 @@ mod tests {
         println!("Block 1: {:?}", block_complete1);
 
         let tm = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos();
-        let block = Block::new(block_complete1.get_index() + 1, tm, *block_complete1.block_hash(), vec![Transaction::new(5)], 1);
+        let block = Block::new(block_complete1.get_index() + 1, tm, *block_complete1.block_hash(), vec![], 1);
 
         let mut rng = rngs::ThreadRng::default();
         let keypair = Keypair::generate(&mut rng);
@@ -135,7 +135,7 @@ mod tests {
     #[test]
     fn test_blockchain_pow() {
         let tm = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos();
-        let block = Block::new(1, tm, [255; 20], vec![Transaction::new(3)], 1);
+        let block = Block::new(1, tm, [255; 20], vec![], 1);
         let block = block.complete_pow();
         println!("{:?}", block);
         let mut chain = chain::Chain::new();
@@ -145,7 +145,7 @@ mod tests {
 
         let blk = chain.get_last().unwrap();
         let tm = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos();
-        let new_block = Block::new(blk.get_index() + 1, tm, *blk.block_hash(), vec![Transaction::new(10)], blk.get_difficulty().clone());
+        let new_block = Block::new(blk.get_index() + 1, tm, *blk.block_hash(), vec![], blk.get_difficulty().clone());
         let new_block = new_block.complete_pow();
         println!("{:?}", new_block);
         chain.add(BlockComplete::POW(new_block)).expect("Error Adding second block");

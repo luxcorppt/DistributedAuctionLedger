@@ -3,7 +3,7 @@
 use std::fmt::Debug;
 use ed25519_dalek_fiat::{Signature, PublicKey, Verifier, Keypair};
 use serde::{Deserialize, Serialize};
-use auction_common::Transaction;
+use auction_common::{Transaction, TransactionSigned};
 use utils::{get_hash};
 use crate::merkle::MerkleTree;
 use rand::rngs;
@@ -20,13 +20,13 @@ pub struct Block{
     timestamp: u128,
     prev_hash: [u8; 20],
     nonce: u64,
-    transactions: Vec<Transaction>,
+    transactions: Vec<TransactionSigned>,
     merkle: [u8; 20],
     difficulty: u64
 }
 
 impl Block {
-    pub fn new(index: u32, timestamp: u128, prev_hash: [u8; 20], mut transactions: Vec<Transaction>, difficulty: u64) -> Self {
+    pub fn new(index: u32, timestamp: u128, prev_hash: [u8; 20], mut transactions: Vec<TransactionSigned>, difficulty: u64) -> Self {
         match MerkleTree::from_transactions(&mut transactions).get_root_hash() {
             None => {
                 Block {
