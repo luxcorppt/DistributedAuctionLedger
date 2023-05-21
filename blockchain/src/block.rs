@@ -45,7 +45,7 @@ impl Block {
     pub fn complete_pow(mut self) -> BlockCompletePoW {
         loop {
             let digest = get_hash(&[&self]);
-            if verify_block_difficulty(&self, &digest[..]) {
+            if verify_block_difficulty(&self, &digest) {
                 return BlockCompletePoW {
                     hash: digest,
                     block_inner: self
@@ -152,7 +152,7 @@ impl BlockCompletePoW {
         if get_hash(&[&self.block_inner]) != self.hash {
             return false;
         }
-        verify_block_difficulty(&self.block_inner, &self.hash[..])
+        verify_block_difficulty(&self.block_inner, &self.hash)
     }
 
     pub fn from_bytes(buffer: &[u8]) -> Result<BlockCompletePoW, BlockError> {
@@ -214,8 +214,23 @@ impl BlockCompletePoS {
 }
 
 
-fn verify_block_difficulty(block: &Block, hash: &[u8]) -> bool {
-    let hex = hex::encode(hash).into_bytes();
-    let zeros = utils::get_leading_zeros(&hex);
+fn verify_block_difficulty(block: &Block, hash: &[u8; 20]) -> bool {
+    let zeros = utils::get_leading_zeros(hash);
     zeros as u64 >= block.difficulty
+}
+
+#[cfg(test)]
+mod test {
+    use std::time::SystemTime;
+    use utils::get_hash;
+    use crate::block::{Block, verify_block_difficulty};
+
+    #[test]
+    fn verify_block_diff(){
+        let block = Block::new(1, 0, [0; 20], vec![], 1);
+        assert!(verify_block_difficulty(&block, &[0u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8]));
+        assert!(!verify_block_difficulty(&block, &[255u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8]));
+        assert!(verify_block_difficulty(&block, &[127u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,255u8]));
+        assert!(!verify_block_difficulty(&block, &[128u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8,5u8]));
+    }
 }

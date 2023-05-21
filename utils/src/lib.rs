@@ -10,7 +10,7 @@ pub fn get_hash<T :Serialize>(arr: &[T]) -> [u8; 20] {
     hasher.digest().bytes()
 }
 
-pub fn get_leading_zeros(array: &Vec<u8>) -> u8 {
+pub fn get_leading_zeros(array: &[u8; 20]) -> u8 {
     let mut result = 0u8;
     for u in array {
         if *u == 0 { result += 8; } else {
