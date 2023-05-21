@@ -1,11 +1,12 @@
 #![allow(unused)]
 
 use std::fmt::Debug;
-use ed25519_dalek_fiat::{Verifier};
+use ed25519_dalek_fiat::{Signature, PublicKey, Verifier, Keypair};
 use serde::{Deserialize, Serialize};
 use auction_common::Transaction;
-use utils::get_hash;
+use utils::{get_hash};
 use crate::merkle::MerkleTree;
+use rand::rngs;
 
 
 pub enum BlockError {
@@ -17,19 +18,19 @@ pub enum BlockError {
 pub struct Block{
     index: u32,
     timestamp: u128,
-    prev_hash: Vec<u8>,
+    prev_hash: [u8; 20],
     nonce: u64,
     transactions: Vec<Transaction>,
-    merkle: Vec<u8>,
+    merkle: [u8; 20],
     difficulty: u64
 }
 
 impl Block {
-    pub fn new(index: u32, timestamp: u128, prev_hash: Vec<u8>, mut transactions: Vec<Transaction>, difficulty: u64) -> Self {
+    pub fn new(index: u32, timestamp: u128, prev_hash: [u8; 20], mut transactions: Vec<Transaction>, difficulty: u64) -> Self {
         match MerkleTree::from_transactions(&mut transactions).get_root_hash() {
             None => {
                 Block {
-                    index, timestamp, prev_hash, nonce: 0, transactions, merkle: vec![255; 20], difficulty
+                    index, timestamp, prev_hash, nonce: 0, transactions, merkle: [0; 20], difficulty
                 }
             }
             Some(merkle) => {
@@ -46,7 +47,7 @@ impl Block {
             let digest = get_hash(&[&self]);
             if verify_block_difficulty(&self, &digest[..]) {
                 return BlockCompletePoW {
-                    hash: digest.to_vec(),
+                    hash: digest,
                     block_inner: self
                 }
             }
@@ -55,10 +56,11 @@ impl Block {
     }
 
     // pub fn complete_pos(self, signing_id: &[u8; 32], signature: &[u8; 64]) -> BlockCompletePoS {
-    pub fn complete_pos(self, signing_id: Vec<u8>, signature: Vec<u8>) -> BlockCompletePoS {
+    pub fn complete_pos(self, signing_id: PublicKey, signature: Signature) -> BlockCompletePoS {
         BlockCompletePoS {
             signing_id,
             signature,
+            hash: get_hash(&[&self]),
             block_inner: self
         }
     }
@@ -72,19 +74,20 @@ pub enum BlockComplete {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BlockCompletePoW {
-    hash: Vec<u8>,
+    hash: [u8; 20],
     block_inner: Block
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BlockCompletePoS {
-    signature: Vec<u8>,
-    signing_id: Vec<u8>,
+    signature: Signature,
+    signing_id: PublicKey,
+    hash: [u8; 20],
     block_inner: Block
 }
 
 impl BlockComplete {
-    pub fn block_hash(&self) -> &[u8] {
+    pub fn block_hash(&self) -> &[u8; 20] {
         match self {
             BlockComplete::POW(block) => {
                 block.block_hash()
@@ -106,7 +109,7 @@ impl BlockComplete {
         }
     }
 
-    pub fn get_prev_hash(&self) -> &Vec<u8>  {
+    pub fn get_prev_hash(&self) -> &[u8; 20]  {
         match self {
             BlockComplete::POW(block) => {
                 block.get_prev_hash()
@@ -141,8 +144,8 @@ impl BlockComplete {
 }
 
 impl BlockCompletePoW {
-    pub fn block_hash(&self) -> &[u8] {
-        &self.hash[..]
+    pub fn block_hash(&self) -> &[u8; 20] {
+        &self.hash
     }
 
     fn is_valid(&self) -> bool {
@@ -161,7 +164,7 @@ impl BlockCompletePoW {
         }
     }
 
-    pub fn get_prev_hash(&self) -> &Vec<u8> {
+    pub fn get_prev_hash(&self) -> &[u8; 20] {
         &self.block_inner.prev_hash
     }
 
@@ -175,13 +178,11 @@ impl BlockCompletePoW {
 }
 
 impl BlockCompletePoS {
-
     pub fn is_valid(&self) -> bool {
-        // TODO: ("is Valid Block POS verify signature if signature is valid for signer id")
-        let pk = ed25519_dalek_fiat::PublicKey::from_bytes(&self.signing_id.as_slice()).unwrap();
-        let sig = ed25519_dalek_fiat::Signature::from_bytes(&self.signature[..]).unwrap();
-        let bytes = &bincode::serialize(&self.block_inner).unwrap()[..];
-        match pk.verify(bytes, &sig) {
+        let mut rng = rngs::ThreadRng::default();
+        let keypair = Keypair::generate(&mut rng);
+        let bytes = &bincode::serialize(&self.hash).unwrap()[..];
+        match self.signing_id.verify(bytes, &self.signature) {
             Ok(_) => {
                 true
             }
@@ -191,11 +192,15 @@ impl BlockCompletePoS {
         }
     }
 
-    pub fn block_hash(&self) -> &[u8] {
-        &self.signature[..]
+    pub fn block_sig(&self) -> &Signature {
+        &self.signature
     }
 
-    pub fn get_prev_hash(&self) -> &Vec<u8> {
+    pub fn block_hash(&self) -> &[u8; 20] {
+        &self.hash
+    }
+
+    pub fn get_prev_hash(&self) -> &[u8; 20] {
         &self.block_inner.prev_hash
     }
 

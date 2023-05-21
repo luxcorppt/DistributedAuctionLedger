@@ -12,8 +12,10 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use std::time::SystemTime;
-    use rcgen::PKCS_ECDSA_P256_SHA256;
+    use ed25519_dalek_fiat::{Keypair, Signer};
+    use rand::rngs;
     use auction_common::Transaction;
+    use utils::get_hash;
     use crate::block::{Block, BlockComplete};
     use crate::{chain, merkle};
 
@@ -46,16 +48,17 @@ mod tests {
     #[test]
     fn test_blockchain_pos() {
         let tm = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos();
-        let block = Block::new(1, tm, vec![5; 8], vec![], 1);
+        let block = Block::new(1, tm, [5; 20], vec![], 1);
 
 
-        let keypair = rcgen::KeyPair::generate(&PKCS_ECDSA_P256_SHA256).unwrap();
-        let pk = keypair.public_key_raw();
-        let bytes = bincode::serialize(&block).unwrap();
+        let mut rng = rngs::ThreadRng::default();
+        let keypair = Keypair::generate(&mut rng);
+        let hash = get_hash(&[&block]);
+        let bytes = bincode::serialize(&hash).unwrap();
 
-        // Sign
+        let sig = keypair.sign(&bytes[..]);
 
-        let block = block.complete_pos(vec![], vec![]);
+        let block = block.complete_pos(keypair.public, sig);
         println!("{:?}", block);
         let mut chain = chain::Chain::new();
         chain.add(BlockComplete::POS(block)).expect("Error Adding first block");
@@ -67,7 +70,7 @@ mod tests {
     #[test]
     fn test_blockchain_pow() {
         let tm = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos();
-        let block = Block::new(1, tm, vec![255; 20], vec![], 2);
+        let block = Block::new(1, tm, [255; 20], vec![], 2);
         let block = block.complete_pow();
         println!("{:?}", block);
         let mut chain = chain::Chain::new();
@@ -77,7 +80,7 @@ mod tests {
 
         let blk = chain.get_last().unwrap();
         let tm = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos();
-        let new_block = Block::new(blk.get_index() + 1, tm, blk.block_hash().to_vec(), vec![], blk.get_difficulty().clone());
+        let new_block = Block::new(blk.get_index() + 1, tm, *blk.block_hash(), vec![], blk.get_difficulty().clone());
         let new_block = new_block.complete_pow();
         println!("{:?}", new_block);
         chain.add(BlockComplete::POW(new_block)).expect("Error Adding second block");

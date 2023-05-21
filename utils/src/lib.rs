@@ -1,18 +1,13 @@
 use rand::{RngCore, rngs};
-use sha1::Digest;
 use serde::{Deserialize, Serialize};
 
-pub type HASH = Vec<u8>;
-pub type PubK = Vec<u8>;
-pub type Signature = Vec<u8>;
-
 // [u8; 20]
-pub fn get_hash<T :Serialize>(arr: &[T]) -> Vec<u8> {
-    let mut bytes = Vec::new();
+pub fn get_hash<T :Serialize>(arr: &[T]) -> [u8; 20] {
+    let mut hasher = sha1_smol::Sha1::new();
     for i in arr.iter() {
-        bytes.append(&mut bincode::serialize(i).unwrap());
+        hasher.update(&mut bincode::serialize(i).unwrap());
     }
-    sha1::Sha1::digest(&bytes).to_vec()
+    hasher.digest().bytes()
 }
 
 pub fn get_leading_zeros(array: &Vec<u8>) -> u8 {
